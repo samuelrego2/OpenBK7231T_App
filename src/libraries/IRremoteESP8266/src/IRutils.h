@@ -3,6 +3,8 @@
 
 // Copyright 2017 David Conran
 
+#define ENABLE_IRAC 1
+
 #ifndef UNIT_TEST
 // TODO:
 #include "String.h"
