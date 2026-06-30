@@ -619,7 +619,7 @@ extern "C" commandResult_t IR_Param(const void *context, const char *cmd, const 
 }
 
 
-
+/*
 #ifdef ENABLE_IRAC
 extern "C" commandResult_t IR_AC_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
 	if (!args_in) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
@@ -645,7 +645,115 @@ extern "C" commandResult_t IR_AC_Cmd(const void *context, const char *cmd, const
 	return CMD_RES_OK;
 }
 #endif //ENABLE_IRAC
+*/
 
+#ifdef ENABLE_IRAC
+extern "C" commandResult_t IR_AC_Cmd(const void *context,
+    const char *cmd,
+    const char *args_in,
+    int cmdFlags)
+{
+    if (!args_in)
+        return CMD_RES_NOT_ENOUGH_ARGUMENTS;
+
+    char args[160];
+    strncpy(args, args_in, sizeof(args) - 1);
+    args[sizeof(args) - 1] = 0;
+
+    //
+    // Formato esperado:
+    //
+    // IRAC TCL112AC,112,0x23CB260200404008B30000000060[,repeat]
+    //
+
+    char *protocolStr = strtok(args, ",");
+    char *bitsStr     = strtok(NULL, ",");
+    char *hexStr      = strtok(NULL, ",");
+    char *repeatStr   = strtok(NULL, ",");
+
+    if (!protocolStr || !bitsStr || !hexStr) {
+        ADDLOG_ERROR(LOG_FEATURE_IR,
+            (char *)"IRAC syntax: PROTOCOL,BITS,HEX[,repeat]");
+        return CMD_RES_BAD_ARGUMENT;
+    }
+
+    decode_type_t protocol = strToDecodeType(protocolStr);
+
+    if (protocol == decode_type_t::UNKNOWN) {
+        ADDLOG_ERROR(LOG_FEATURE_IR,
+            (char *)"Unknown protocol %s", protocolStr);
+        return CMD_RES_BAD_ARGUMENT;
+    }
+
+    uint16_t bits = atoi(bitsStr);
+
+    if ((bits % 8) != 0) {
+        ADDLOG_ERROR(LOG_FEATURE_IR,
+            (char *)"Bits must be multiple of 8");
+        return CMD_RES_BAD_ARGUMENT;
+    }
+
+    uint16_t bytes = bits / 8;
+
+    if (bytes > 64) {
+        ADDLOG_ERROR(LOG_FEATURE_IR,
+            (char *)"State too large");
+        return CMD_RES_BAD_ARGUMENT;
+    }
+
+    if (!pIRsend) {
+        ADDLOG_ERROR(LOG_FEATURE_IR,
+            (char *)"IR sender not initialized");
+        return CMD_RES_ERROR;
+    }
+
+    if (!strncmp(hexStr, "0x", 2) || !strncmp(hexStr, "0X", 2))
+        hexStr += 2;
+
+    if (strlen(hexStr) != bytes * 2) {
+        ADDLOG_ERROR(LOG_FEATURE_IR,
+            (char *)"Invalid hex length");
+        return CMD_RES_BAD_ARGUMENT;
+    }
+
+    uint8_t state[64];
+
+    for (uint16_t i = 0; i < bytes; i++) {
+        char tmp[3];
+        tmp[0] = hexStr[i * 2];
+        tmp[1] = hexStr[i * 2 + 1];
+        tmp[2] = 0;
+
+        state[i] = (uint8_t)strtoul(tmp, NULL, 16);
+    }
+
+    uint16_t repeats = repeatStr ? atoi(repeatStr) : 0;
+
+    switch (protocol) {
+
+#if SEND_TCL112AC
+        case decode_type_t::TCL112AC:
+            pIRsend->sendTcl112Ac(state, bytes, repeats);
+            break;
+#endif
+
+        default:
+            ADDLOG_ERROR(LOG_FEATURE_IR,
+                (char *)"Protocol %s not implemented",
+                protocolStr);
+            return CMD_RES_BAD_ARGUMENT;
+    }
+
+    pIRsend->delay(100);
+
+    ADDLOG_INFO(LOG_FEATURE_IR,
+        (char *)"IRAC sent %s (%d bits)",
+        protocolStr,
+        bits);
+
+    return CMD_RES_OK;
+}
+#endif //ENABLE_IRAC
 
 // test routine to start IR RX and TX
 // currently fixed pins for testing.
