@@ -733,7 +733,11 @@ extern "C" commandResult_t IR_AC_Cmd(const void *context,
 
 #if SEND_TCL112AC
         case decode_type_t::TCL112AC:
-            pIRsend->sendTcl112Ac(state, bytes, repeats);
+            // pIRsend->sendTcl112Ac(state, bytes, repeats);
+			IRTcl112Ac ac(IR_GetPinForIRTx());  // use o pino IR do seu projeto
+			ac.begin();
+			ac.setRaw(state, bytes);
+			ac.send(repeats);
             break;
 #endif
 
